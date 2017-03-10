@@ -1,0 +1,9 @@
+reset
+printf "stat make\n"
+make
+printf "stat run\n"
+./Interpreter < input > output
+printf "end script\n"
+printf "....................\n"
+cat output
+printf "....................\n"

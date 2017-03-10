@@ -1,0 +1,1 @@
+#define MYCONSTANT 5
