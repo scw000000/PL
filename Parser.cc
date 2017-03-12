@@ -3,98 +3,6 @@
 #include <iostream>
 #include <string>
 using namespace std;
-//using namespace std::tr1;
-
-bool ParserNode::IsList( void )
-    {
-    ParserNode* pNode = this;    
-    while( pNode )
-        {
-        if( pNode->HasNoChild() )
-            {
-            if( !pNode->IsNilAtom() )
-                {
-                return false;   
-                }
-            return true;  
-            }
-        else
-            {
-            if( !pNode->m_pLeftChild )
-                {
-                return false;   
-                }
-            }
-        pNode = pNode->m_pRightChild.get();  
-        }
-    
-    return true;
-    }
-
-int ParserNode::GetListLength( void )
-    {
-    int ans = 0;
-    ParserNode* pNode = this;    
-    while( pNode )
-        {
-        if( pNode->HasNoChild() )
-            {
-            if( !pNode->IsNilAtom() )
-                {
-                return -1;   
-                }
-            return ans;  
-            }
-        else
-            {
-            if( !pNode->m_pLeftChild )
-                {
-                return -1;   
-                }
-            }
-        pNode = pNode->m_pRightChild.get();
-        ++ans;
-        }
-    
-    return true;
-    }
-    
-shared_ptr< ParserNode > ParserNode::GetListNode( unsigned int index ) const
-    {
-    if( HasNoChild() )
-        {
-        return shared_ptr< parserNode >();
-        }
-    if( !index )
-        { 
-        return m_pLeftChild;   
-        }
-    return m_pRightChild->GetListNode( --index );
-    }
-        
-void ParserNode::LinkLeftChild( std::shared_ptr< ParserNode > left )
-    {
-    m_pLeftChild = left;
-    if( m_pLeftChild )
-        {
-        m_pLeftChild->m_pParent = this;
-        }
-    }
-
-void ParserNode::LinkRightChild( std::shared_ptr< ParserNode > right )
-    {
-    m_pRightChild = right;
-    if( m_pRightChild )
-        {
-        m_pRightChild->m_pParent = this;
-        }    
-    }
-    
-void ParserNode::LinkChildren( std::shared_ptr< ParserNode > left, std::shared_ptr< ParserNode > right )
-    {
-    LinkLeftChild( left );
-    LinkRightChild( right );
-    }
 
 bool Parser::ParseExpr( void )
     {
@@ -103,7 +11,7 @@ bool Parser::ParseExpr( void )
         {
         return false;
         }
-    m_pRoot = Evaluate( m_pRoot, NULL, NULL );
+    m_pRoot = Evaluate( m_pRoot, GenNode( NodeTypes_LiteralAtoms, "NIL" ), m_pDef );
     if( !m_pRoot )
         {
         return false;   
@@ -431,6 +339,55 @@ shared_ptr< parserNode > Parser::EvaluateCond(  shared_ptr< ParserNode > pExp,
     return shared_ptr< parserNode >();    
     }
 
+bool Parser::Bound( shared_ptr< parserNode > pKey, shared_ptr< parserNode > pList ) const
+    {
+    if( !pKey || !pList )
+        {
+        return false;
+        }
+    int listLen = pList->GetListLength();
+    if( listLen <= 0 )
+        {
+        return false;
+        }
+    for( int i = 0; i < listLen; ++i )
+        {
+        auto pCurrNode = pList->GetListNode( i );
+        if( Car( pCurrNode )->Equal( *( pKey.get() ) )  )
+            {
+            return true;
+            }
+        }
+    return false;
+    }
+ 
+ shared_ptr< parserNode > Parser::GetVal( shared_ptr< parserNode > pKey, shared_ptr< parserNode > pList ) const
+    {
+    if( !pKey || !pList )
+        {
+        return shared_ptr< parserNode >();
+        }
+    int listLen = pList->GetListLength();
+    std::cout << "finding " << pKey->m_Str << std::endl;
+    if( listLen <= 0 )
+        {
+        return shared_ptr< parserNode >();
+        }
+    std::cout << "Length = " << listLen << std::endl;
+    for( int i = 0; i < listLen; ++i )
+        {
+        auto pCurrNode = pList->GetListNode( i );
+        std::cout << "testing ";
+        PrintRecursive( pCurrNode );
+        std::cout << std::endl;
+        if( Car( pCurrNode )->Equal( *( pKey.get() ) )  )
+            {
+            return Cdr( pCurrNode );
+            }
+        }
+    return shared_ptr< parserNode >();
+    }
+    
 shared_ptr< parserNode > Parser::EvaluateList( shared_ptr< ParserNode > pExp,
                                        shared_ptr< ParserNode > pActual,
                                        shared_ptr< ParserNode > pDef
@@ -509,7 +466,6 @@ shared_ptr< parserNode > Parser::Apply( shared_ptr< ParserNode > pFunct,
         if( listLen != 2 )
             {
             m_ErrorStr = "ERROR: Invalid parameter list length, it must be 2";
-            std::cout << "ddddasd" << std::endl;
             //PrintRecursive( pExp );
             return shared_ptr< parserNode >(); 
             }
@@ -523,10 +479,10 @@ shared_ptr< parserNode > Parser::Apply( shared_ptr< ParserNode > pFunct,
         if( !evalLeft->IsNumericAtom() || !evalRight->IsNumericAtom() )
             {
             m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
-            std::cout << "They are:::::: ";
+            /* std::cout << "They are:::::: ";
             PrintRecursive( evalLeft );
             PrintRecursive( evalRight );
-            std::cout << std::endl;
+            std::cout << std::endl; */
             
             return shared_ptr< parserNode >();  
             }
@@ -676,7 +632,20 @@ shared_ptr< parserNode > Parser::Apply( shared_ptr< ParserNode > pFunct,
         }
     else // user-defined function
         {
-        return shared_ptr< parserNode >();    
+        // pFunctDef = ( parameter. funct body )
+        auto pFunctDef = GetVal( pFunct, pDef );
+        if( !pFunctDef )
+            {
+            m_ErrorStr = "ERROR: Not supported operator ";
+            m_ErrorStr.append( pFunct->m_Str );
+            return shared_ptr< parserNode >();       
+            }
+        auto pAppliedList = AddPairs( Car( pFunctDef ), pExp, pActual );
+        if( !pAppliedList )
+            {
+            return pAppliedList;
+            }
+        return Evaluate( Cdr( pFunctDef ), pAppliedList, pDef );
         }
     
     m_ErrorStr = "ERROR: Undefined operator ";
@@ -700,9 +669,15 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
             case NodeTypes_LiteralAtoms:
                 if( !pExp->IsNilAtom() && !pExp->IsT() )
                     {
-                    std::cout << "!!!!!!!!!!!!!!!!!ddddaweeee" << std::endl;
-                    m_ErrorStr = "ERROR: Cannot evaluate literal atom";
-                    return shared_ptr< parserNode >();  
+                    auto pValue = GetVal( pExp, pActual );
+                    if( !pValue )
+                        {
+                        m_ErrorStr = "ERROR: Cannot find ";
+                        m_ErrorStr.append( pExp->m_Str );
+                        m_ErrorStr.append( " in actual list" );
+                        PrintRecursive( pActual );
+                        }
+                    return pValue; 
                     }
                 return pExp;
                 break;
@@ -782,13 +757,29 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
         }
     else if( BelongToGroup( operatorName->m_Str, { "DEFUN" } ) )
         {
-        return shared_ptr< parserNode >();
+        int pListLen = pExp->GetListLength();
+        if( pListLen != 4 )
+            {
+            m_ErrorStr = "ERROR: Invalid function def format";
+            std::cout << pListLen << std::endl;
+            return shared_ptr< parserNode >();
+            }
+        auto pValueList = Cons( Cons( pExp->GetListNode( 2 ), pExp->GetListNode( 3 ) ), GenNode( NodeTypes_LiteralAtoms, "NIL" ) );
+        auto pNewDef = AddPairs( Cons ( pExp->GetListNode( 1 ), GenNode( NodeTypes_LiteralAtoms, "NIL" ) ), pValueList, pDef );
+        if( !pNewDef )
+            {
+            return shared_ptr< parserNode >();
+            }
+        PrintRecursive( pNewDef );
+        m_pDef = pNewDef;
+        // pFunctDef = ( parameter. funct body )
+        return pExp->GetListNode( 1 );
         }
     else // Maybe user defined function
         {
-        std::cout << "calling apply from ";
+        // std::cout << "calling apply from ";
         PrintRecursive( pExp );
-        std::cout << "calee: "<<std::endl;
+        // std::cout << "calee: "<<std::endl;
         PrintRecursive( Cdr( pExp ) );
         std::cout << std::endl;
         auto pEvalList = EvaluateList( Cdr( pExp ), pActual, pDef );
@@ -797,7 +788,6 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
             return pEvalList;
             }
         auto p = Apply( operatorName, pEvalList, pActual, pDef );
-      //  std::cout << m_ErrorStr << std::endl;
         return p;
         /* return Apply( operatorName, EvaluateList( Cdr( pExp ), pActual, pDef ), pActual, pDef ); */
         }
@@ -807,23 +797,25 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
     return shared_ptr< parserNode >();
     }
     
-std::shared_ptr< ParserNode > Parser::AddPairs(  std::shared_ptr< ParserNode > pXList, 
-                        std::shared_ptr< ParserNode > pYList,
-                        std::shared_ptr< ParserNode > pZList
-                        )
+std::shared_ptr< ParserNode > Parser::AddPairs( std::shared_ptr< ParserNode > pXList, 
+                                                std::shared_ptr< ParserNode > pYList,
+                                                std::shared_ptr< ParserNode > pZList
+                                                )
     {
     int xListLen = pXList->GetListLength();
     int yListLen = pYList->GetListLength();
-    
+    std::cout << "xLen " << xListLen << " yLen " << yListLen << std::endl; 
     if( xListLen == -1 || yListLen == -1 || xListLen != yListLen )
         {
         m_ErrorStr = "parameter list length not equal or either one of them is not a list";
+        std::cout << xListLen << " " << yListLen << std::endl;
         return std::shared_ptr< ParserNode >();
         }
-    for( unsigned int i = xListLen - 1; i >= 0; --i )
+    for( int i = xListLen - 1; i >= 0; --i )
         {
         auto pNewMember = Cons( pXList->GetListNode( i ), pYList->GetListNode( i ) );
         pZList = Cons( pNewMember, pZList );
         }
+    PrintRecursive( pZList );
     return pZList;
     }

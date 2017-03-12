@@ -16,7 +16,7 @@ COMPILE = $(CXX) $(CXXFLAGS) -c
 EXE = Interpreter
 
 # All object files
-OBJS = main.o Scanner.o Parser.o
+OBJS = main.o Scanner.o Parser.o ParserNode.o
 
 # The first target is the one that is executed when you invoke
 # "make". The line describing the action starts with <TAB>. Variable
@@ -34,4 +34,6 @@ main.o : Scanner.h Parser.h
 
 Scanner.o : Scanner.h
 
-Parser.o : Parser.h
+Parser.o : Parser.h ParserNode.h
+
+ParserNode.o : ParserNode.h
