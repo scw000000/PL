@@ -37,8 +37,8 @@ typedef struct abstractValData
 typedef struct parserNode
     {
     public:
-        parserNode( NodeTypes type, const std::string& str )
-            : m_Type( type ), m_Str( str )
+        parserNode( NodeTypes type, const std::string& str, std::shared_ptr< abstractValData > pData )
+            : m_Type( type ), m_Str( str ), m_pAbstractVal( pData )
             {
             } 
         std::shared_ptr< parserNode > GetListNode( unsigned int index ) const;
@@ -56,7 +56,9 @@ typedef struct parserNode
         void LinkLeftChild( std::shared_ptr< parserNode > left );
         void LinkRightChild( std::shared_ptr< parserNode > right );
         void LinkChildren( std::shared_ptr< parserNode > left, std::shared_ptr< parserNode > right );
-
+        AbstractVals GetAbstractVal( void ) const { if( m_pAbstractVal ) { return m_pAbstractVal->m_AbstractVal; } return AbstractVals_Unkown; }
+        int GetAbstractListLen( void ) const { if( m_pAbstractVal ) { return m_pAbstractVal->m_ListLenth; } return -1; }
+        
     public:
         parserNode*                 m_pParent;
         std::shared_ptr< parserNode >    m_pLeftChild;

@@ -4,11 +4,11 @@
 #include <string>
 using namespace std;
     
-shared_ptr< parserNode > GenNode( NodeTypes type, const std::string& str )
+shared_ptr< parserNode > GenNode( NodeTypes type, const std::string& str, shared_ptr< abstractValData > pData = shared_ptr< abstractValData >() )
     {
-    return shared_ptr< parserNode >( new ParserNode( type, str ) );
+    return shared_ptr< parserNode >( new ParserNode( type, str, pData ) );
     }
-    
+        
 bool Parser::ParseExpr( void )
     {
     bool success = ParseExprRecursive( shared_ptr< ParserNode >() );
@@ -697,18 +697,33 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
         switch ( pExp->m_Type )
             {
             case NodeTypes_LiteralAtoms:
-                if( !pExp->IsNilAtom() && !pExp->IsT() && !pExp->IsF() )
+                if( pExp->IsNilAtom() )
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "NIL", make_shared< abstractValData >( AbstractVals_List, 0 ) );
+                    }
+                else if( pExp->IsT() )
+                    {
+                        return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );
+                    //pExp->m_pAbstractVal = make_shared< abstractValData >( AbstractVals_True );    
+                    }
+                else if( pExp->IsF() )
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False) );
+                    // pExp->m_pAbstractVal = make_shared< abstractValData >( AbstractVals_False );   
+                    }
+                else
                     {
                     m_ErrorStr = "ERROR: Cannot eval literal atom other than boolean var or empty list";
-                    return shared_ptr< parserNode >();
+                    return shared_ptr< parserNode >();    
                     }
                 return pExp;
                 break;
             case NodeTypes_NumericAtoms:
                 if( Int( pExp )->IsT() )
                     {
-                    // PrintRecursive( pExp );
-                    return pExp;
+                    return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
+                    // pExp->m_pAbstractVal = make_shared< abstractValData >( AbstractVals_AnyNat );   
+                    // return pExp;
                     }
                 m_ErrorStr = "ERROR: Invalid numeric atom";
                 return shared_ptr< parserNode >();                
@@ -725,54 +740,55 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
         m_ErrorStr = "ERROR: Invalid list length < 2 or it's not a list";
         return shared_ptr< parserNode >();
         }
+        
     shared_ptr< parserNode > pFunct( Car( pExp ) );
     if( !pFunct )
         {
         m_ErrorStr = "ERROR: Illiegal operator or cannot find it";
         return shared_ptr< parserNode >();    
         }    
-        
-    if( BelongToGroup( pFunct->m_Str, { "COND" } ) )
-        {
-        // return EvaluateCond( Cdr( pExp ) ); 
-        }
-    else // predefined function
-        {
-        if( !pFunct->IsAtom() )
+    
+    if( !pFunct->IsAtom() )
             {
             m_ErrorStr = "ERROR: Invalid operator, which is not an atom";
             return shared_ptr< parserNode >();  
             }
 
-        switch ( pFunct->m_Type )
-            {
-            case NodeTypes_LiteralAtoms:
-                if( pFunct->IsNilAtom() || pFunct->IsT() )
-                    {
-                    m_ErrorStr = "ERROR: Invalid operator name which is boolean";
-                    return shared_ptr< parserNode >();  
-                    }
-                break;
-            case NodeTypes_NumericAtoms:
-                m_ErrorStr = "ERROR: Invalid operator name which is numeric atom";
-                return shared_ptr< parserNode >();                
-                break;
-            case NodeTypes_Empty: 
-                m_ErrorStr = "ERROR: Invalid operator name which is empty";
-                return shared_ptr< parserNode >();
-                break;
-            };
+    switch ( pFunct->m_Type )
+        {
+        case NodeTypes_LiteralAtoms:
+            if( pFunct->IsNilAtom() || pFunct->IsT() )
+                {
+                m_ErrorStr = "ERROR: Invalid operator name which is boolean";
+                return shared_ptr< parserNode >();  
+                }
+            break;
+        case NodeTypes_NumericAtoms:
+            m_ErrorStr = "ERROR: Invalid operator name which is numeric atom";
+            return shared_ptr< parserNode >();                
+            break;
+        case NodeTypes_Empty: 
+            m_ErrorStr = "ERROR: Invalid operator name which is empty";
+            return shared_ptr< parserNode >();
+            break;
+        };
             
-        std::vector< std::string > predefinedFuncs( { "CAR", "CDR", "CONS", "ATOM", "EQ", "NULL", "INT", "PLUS", "MINUS", 
-                "TIMES", "LESS", "GREATER", "COND" } );
+    std::vector< std::string > predefinedFuncs( { "CAR", "CDR", "CONS", "ATOM", "EQ", "NULL", "INT", "PLUS", "MINUS", 
+            "TIMES", "LESS", "GREATER", "COND" } );
                 
-        if( !BelongToGroup( pFunct->m_Str, predefinedFuncs ) )
-            {
-            m_ErrorStr = "ERROR: Not supported operator";
-            m_ErrorStr.append( pFunct->m_Str );
-            return shared_ptr< parserNode >();       
-            }
-        
+    if( !BelongToGroup( pFunct->m_Str, predefinedFuncs ) )
+        {
+        m_ErrorStr = "ERROR: Not supported operator";
+        m_ErrorStr.append( pFunct->m_Str );
+        return shared_ptr< parserNode >();       
+        }
+    
+    if( BelongToGroup( pFunct->m_Str, { "COND" } ) )
+        {
+        return shared_ptr< parserNode >();    
+        }
+    else // predefined function
+        {
         auto pEvalList = TypeCheckList( Cdr( pExp ) );
         if( !pEvalList )
             {
@@ -781,9 +797,9 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
             
         if( BelongToGroup( pFunct->m_Str, { "PLUS", "MINUS", "TIMES", "LESS", "GREATER" } ) )
             {
-            if( listLen != 2 )
+            if( listLen != 3 )
                 {
-                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 2";
+                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 3";
                 return shared_ptr< parserNode >(); 
                 }
             auto evalLeft = pEvalList->GetListNode( 0u );
@@ -793,19 +809,20 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                 {
                 return shared_ptr< parserNode >(); 
                 }
-            if( !evalLeft->IsNumericAtom() || !evalRight->IsNumericAtom() )
+                
+            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
                 {
                 m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
             
                 return shared_ptr< parserNode >();  
                 }
-            return GenNode( NodeTypes_NumericAtoms, "0" );
-        }
+            return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
+            }
         else if( BelongToGroup( pFunct->m_Str, { "EQ" } ) )
             {
-            if( listLen != 2 )
+            if( listLen != 3 )
                 {
-                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 2";
+                m_ErrorStr = "ERROR: Invalid list length, it must be 3";
                 return shared_ptr< parserNode >(); 
                 }
             auto evalLeft = pEvalList->GetListNode( 0u );
@@ -814,18 +831,18 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                 {
                 return shared_ptr< parserNode >();   
                 } 
-            if( !evalLeft->IsNumericAtom() || !evalRight->IsNumericAtom() )
+            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
                 {
                 m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
                 return shared_ptr< parserNode >();  
                 }
-            return GenNode( NodeTypes_LiteralAtoms, "T" );
+            return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );
             }
         else if( BelongToGroup( pFunct->m_Str, { "ATOM", "INT", "NULL" } ) )
             {
-            if( listLen != 1 )
+            if( listLen != 2 )
                 {
-                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 1";
+                m_ErrorStr = "ERROR: Invalid list length, it must be 2";
                 return shared_ptr< parserNode >(); 
                 }
             auto evalLeft = pEvalList->GetListNode( 0u );
@@ -833,17 +850,58 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                 {
                 return shared_ptr< parserNode >();  
                 }
+                
+            auto abstractVal = evalLeft->GetAbstractVal();
+            if( abstractVal == AbstractVals_Unkown )
+                {
+                m_ErrorStr = "ERROR: Non well typed parameter";
+                return shared_ptr< parserNode >(); 
+                }
             if( !pFunct->m_Str.compare( "ATOM" ) )
                 {
-                return Atom( evalLeft );
+                if( abstractVal != AbstractVals_List )
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
+                    }
+                else
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
+                    }
                 }
             else if( !pFunct->m_Str.compare( "INT" ) )
                 {
-                return Int( evalLeft );
+                if( abstractVal == AbstractVals_AnyNat )
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
+                    }
+                else
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
+                    }
                 }
             else if( !pFunct->m_Str.compare( "NULL" ) )
                 {
-                return Nul( evalLeft );
+                if( abstractVal != AbstractVals_List )
+                    {
+                    m_ErrorStr = "ERROR: Input is not a list";
+                    return shared_ptr< parserNode >(); 
+                    }
+                
+                int abstractListLen = evalLeft->GetAbstractListLen(); 
+                if( abstractListLen < 0 )
+                    {
+                    m_ErrorStr = "ERROR: Input is not a list";
+                    return shared_ptr< parserNode >();    
+                    }
+                    
+                if( abstractListLen == 0 ) // it should be anybool instead of True
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );       
+                    }  
+                else
+                    {
+                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
+                    }
                 }
             else 
                 {
@@ -854,28 +912,45 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
             }
         else if( BelongToGroup( pFunct->m_Str, { "CAR", "CDR" } ) )
             {
-            if( listLen != 1 )
+            if( listLen != 2 )
                 {
-                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 1";
+                m_ErrorStr = "ERROR: Invalid list length, it must be 2";
                 return shared_ptr< parserNode >(); 
                 }
+                
             auto evalLeft = pEvalList->GetListNode( 0u );
             if( !evalLeft )
                 {
                 return shared_ptr< parserNode >();  
                 }
-            if( evalLeft->IsAtom() )
+                
+            auto abstractVal = evalLeft->GetAbstractVal();
+            if( abstractVal == AbstractVals_Unkown )
                 {
-                m_ErrorStr = "ERROR: s1 is atom";
-                return shared_ptr< parserNode >();  
+                m_ErrorStr = "ERROR: Non well typed parameter";
+                return shared_ptr< parserNode >(); 
                 }
+            
+            if( abstractVal != AbstractVals_List )
+                {
+                m_ErrorStr = "ERROR: Parameter is not a list";
+                return shared_ptr< parserNode >(); 
+                }
+            
+            int abstractListLen = evalLeft->GetAbstractListLen();
+            if( abstractListLen <= 0 )
+                {
+                m_ErrorStr = "ERROR: List length >= 0";
+                return shared_ptr< parserNode >();         
+                }
+            
             if( !pFunct->m_Str.compare( "CAR" ) )
                 {
-                return Car( evalLeft );
+                return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
                 }
             else if( !pFunct->m_Str.compare( "CDR" ) )
                 {
-                return Cdr( evalLeft );
+                return GenNode( NodeTypes_Empty, "LIST", make_shared< abstractValData >( AbstractVals_List, abstractListLen - 1 ) );
                 }
             else 
                 {
@@ -886,9 +961,9 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
             }
         else if( BelongToGroup( pFunct->m_Str, { "CONS" } ) )
             {
-            if( listLen != 2 )
+            if( listLen != 3 )
                 {
-                m_ErrorStr = "ERROR: Invalid paremeter list length, it must be 2";
+                m_ErrorStr = "ERROR: Invalid list length, it must be 3";
                 return shared_ptr< parserNode >(); 
                 }
             auto evalLeft = pEvalList->GetListNode( 0u );
@@ -897,9 +972,16 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                 {
                 return shared_ptr< parserNode >();  
                 }
+                
+            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_List )
+                {
+                m_ErrorStr = "ERROR: invalid parameter type";
+                return shared_ptr< parserNode >();  
+                }
+                
             if( !pFunct->m_Str.compare( "CONS" ) )
                 {
-                return Cons( evalLeft, evalRight );
+                return GenNode( NodeTypes_Empty, "LIST", make_shared< abstractValData >( AbstractVals_List, evalRight->GetAbstractListLen() + 1 ) );
                 }
             else 
                 {
