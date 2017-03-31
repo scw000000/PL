@@ -37,6 +37,7 @@ class Parser
         std::shared_ptr< parserNode > Apply( std::shared_ptr< ParserNode > pFunct,
                                                 std::shared_ptr< ParserNode > pExp );
         std::shared_ptr< parserNode > Evaluate( std::shared_ptr< ParserNode > pExp );
+        std::shared_ptr< parserNode > TypeCheckList( std::shared_ptr< ParserNode > pExp );
         std::shared_ptr< parserNode > TypeCheck( std::shared_ptr< ParserNode > pExp );
         
         std::shared_ptr< ParserNode > AddPairs(  std::shared_ptr< ParserNode > pXList, 

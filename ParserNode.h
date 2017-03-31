@@ -20,12 +20,25 @@ enum AbstractVals
     AbstractVals_List,
     AbstractVals_Unkown
     };
+
+typedef struct abstractValData
+    {
+    public:
+        abstractValData( AbstractVals absVal, int listLen = 0 ) 
+         : m_AbstractVal( absVal ), m_ListLenth( listLen ) 
+            {
+               
+            }
+    public:
+        AbstractVals                m_AbstractVal;
+        int                         m_ListLenth;
+    }AbstractValData;
     
 typedef struct parserNode
     {
     public:
-        parserNode( NodeTypes type, const std::string& str, AbstractVals absVal, int listLen = 0 )
-            : m_Type( type ), m_Str( str ), m_AbstractVal( absVal ), m_ListLenth( listLen )
+        parserNode( NodeTypes type, const std::string& str )
+            : m_Type( type ), m_Str( str )
             {
             } 
         std::shared_ptr< parserNode > GetListNode( unsigned int index ) const;
@@ -43,13 +56,13 @@ typedef struct parserNode
         void LinkLeftChild( std::shared_ptr< parserNode > left );
         void LinkRightChild( std::shared_ptr< parserNode > right );
         void LinkChildren( std::shared_ptr< parserNode > left, std::shared_ptr< parserNode > right );
-        
+
     public:
-        NodeTypes                   m_Type;
         parserNode*                 m_pParent;
         std::shared_ptr< parserNode >    m_pLeftChild;
         std::shared_ptr< parserNode >    m_pRightChild;
+        NodeTypes                   m_Type;
         std::string                 m_Str;
-        AbstractVals                m_AbstractVal;
-        int                         m_ListLenth;
+        std::shared_ptr< abstractValData >    m_pAbstractVal;
+        
     }ParserNode;
