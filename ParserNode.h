@@ -11,14 +11,23 @@ enum NodeTypes
     NodeTypes_Empty
     };
 
+enum AbstractVals
+    {
+    AbstractVals_True,
+    AbstractVals_False,
+    AbstractVals_AnyBool,
+    AbstractVals_AnyNat,
+    AbstractVals_List,
+    AbstractVals_Unkown
+    };
+    
 typedef struct parserNode
     {
     public:
-        parserNode( NodeTypes type, const std::string& str )
-            : m_Type( type ), m_Str( str ) 
+        parserNode( NodeTypes type, const std::string& str, AbstractVals absVal, int listLen = 0 )
+            : m_Type( type ), m_Str( str ), m_AbstractVal( absVal ), m_ListLenth( listLen )
             {
-            
-            }   
+            } 
         std::shared_ptr< parserNode > GetListNode( unsigned int index ) const;
         bool Equal( const parserNode& other ) const;
         bool IsList( void );
@@ -27,6 +36,7 @@ typedef struct parserNode
         bool IsAtom( void ) const { return HasNoChild() && m_Type != NodeTypes_Empty; }
         bool IsLiteralAtom( void ) const {  return IsAtom() && m_Type == NodeTypes_LiteralAtoms; }
         bool IsT( void ) const { return IsLiteralAtom() && !m_Str.compare( "T" ); }
+        bool IsF( void ) const { return IsLiteralAtom() && !m_Str.compare( "F" ); }
         bool IsNilAtom( void ) const { return IsLiteralAtom() && !m_Str.compare( "NIL" ); }
         // bool IsNumericAtom( void ) const {  std::locale loc; return IsAtom() && m_Type == NodeTypes_NumericAtoms && std::isdigit( m_Str[ 0 ], loc ); }
         bool IsNumericAtom( void ) const { return IsAtom() && m_Type == NodeTypes_NumericAtoms; }
@@ -40,4 +50,6 @@ typedef struct parserNode
         std::shared_ptr< parserNode >    m_pLeftChild;
         std::shared_ptr< parserNode >    m_pRightChild;
         std::string                 m_Str;
+        AbstractVals                m_AbstractVal;
+        int                         m_ListLenth;
     }ParserNode;
