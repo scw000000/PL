@@ -411,31 +411,7 @@ shared_ptr< parserNode > Parser::Apply( shared_ptr< ParserNode > pFunct,
     /* std::cout << "Applying ";
     PrintRecursive( pExp );
     std::cout << std::endl; */
-    if( !pFunct->IsAtom() )
-        {
-        m_ErrorStr = "ERROR: Invalid function, which is not an atom";
-        return shared_ptr< parserNode >();  
-        }
-
-    switch ( pFunct->m_Type )
-        {
-        case NodeTypes_LiteralAtoms:
-            if( pFunct->IsNilAtom() || pFunct->IsT() )
-                {
-                m_ErrorStr = "ERROR: Invalid function name which is boolean";
-                return shared_ptr< parserNode >();  
-                }
-            break;
-        case NodeTypes_NumericAtoms:
-            m_ErrorStr = "ERROR: Invalid function name which is numeric atom";
-            return shared_ptr< parserNode >();                
-            break;
-        case NodeTypes_Empty: 
-            m_ErrorStr = "ERROR: Invalid function name which is empty";
-            return shared_ptr< parserNode >();
-            break;
-        };
- 
+    
     int listLen = pExp->GetListLength();
     if( listLen < 0 )
         {
@@ -670,17 +646,17 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
             };
         }
     int listLen = pExp->GetListLength();
-    if( listLen < 2 )
+    if( listLen < 1 )
         {
-        m_ErrorStr = "ERROR: Invalid list length < 2 or it's not a list";
+        m_ErrorStr = "ERROR: Invalid list length < 1 or it's not a list";
         return shared_ptr< parserNode >();
         }
     shared_ptr< parserNode > operatorName( Car( pExp ) );
     if( !operatorName )
         {
-        m_ErrorStr = "ERROR: Cannot find operator";
+        m_ErrorStr = "ERROR: Illiegal operator or cannot find it";
         return shared_ptr< parserNode >();    
-        }
+        }    
         
     if( BelongToGroup( operatorName->m_Str, { "QUOTE" } ) )
         {
@@ -737,7 +713,7 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
             }
         auto pFunctName = pExp->GetListNode( 1 );
         std::vector< std::string > invalidNames( { "T", "NIL", "CAR", "CDR", "CONS", "ATOM", "EQ", "NULL", "INT", "PLUS", "MINUS", 
-                "TIMES", "LES", "GREATER", "COND", "QUOTE", "DEFUN" } );
+                "TIMES", "LESS", "GREATER", "COND", "QUOTE", "DEFUN" } );
         if( !pFunctName->IsLiteralAtom() || BelongToGroup( pFunctName->m_Str, invalidNames ) )
             {
             m_ErrorStr = "ERROR: Invalid DEFUN funct name ";
@@ -783,18 +759,67 @@ shared_ptr< parserNode > Parser::Evaluate( shared_ptr< ParserNode > pExp,
         // pFunctDef = ( parameter. funct body )
         return pExp->GetListNode( 1 );
         }
-    else // Maybe user defined function
+    else // Maybe user defined or predefined function
         {
         // std::cout << "calling apply from ";
         // PrintRecursive( pExp );
         // std::cout << "calee: "<<std::endl;
         // PrintRecursive( Cdr( pExp ) );
         // std::cout << std::endl;
+         // pFunctDef = ( parameter. funct body )
+        if( !operatorName->IsAtom() )
+            {
+            m_ErrorStr = "ERROR: Invalid operator, which is not an atom";
+            return shared_ptr< parserNode >();  
+            }
+
+        switch ( operatorName->m_Type )
+            {
+            case NodeTypes_LiteralAtoms:
+                if( operatorName->IsNilAtom() || operatorName->IsT() )
+                    {
+                    m_ErrorStr = "ERROR: Invalid operator name which is boolean";
+                    return shared_ptr< parserNode >();  
+                    }
+                break;
+            case NodeTypes_NumericAtoms:
+                m_ErrorStr = "ERROR: Invalid operator name which is numeric atom";
+                return shared_ptr< parserNode >();                
+                break;
+            case NodeTypes_Empty: 
+                m_ErrorStr = "ERROR: Invalid operator name which is empty";
+                return shared_ptr< parserNode >();
+                break;
+            };
+            
+        auto pFunctDef = GetVal( operatorName, pDef );
+        std::vector< std::string > predefinedFuncs( { "CAR", "CDR", "CONS", "ATOM", "EQ", "NULL", "INT", "PLUS", "MINUS", 
+                "TIMES", "LESS", "GREATER", "COND", "QUOTE", "DEFUN" } );
+                
+        if( !pFunctDef && !BelongToGroup( operatorName->m_Str, predefinedFuncs ) )
+            {
+            m_ErrorStr = "ERROR: Not supported operator";
+            m_ErrorStr.append( operatorName->m_Str );
+            return shared_ptr< parserNode >();       
+            }
+        // User defined function, check param list length as well
+        if( pFunctDef ) 
+            {
+            int funcDefParamListLen = Car( pFunctDef )->GetListLength();
+            int funcCallParamListLen = Cdr( pExp )->GetListLength();
+            if( funcDefParamListLen != funcCallParamListLen || funcDefParamListLen == -1 )
+                {
+                m_ErrorStr = "ERROR: parameter list length not equal or either one of them is not a list";
+                return std::shared_ptr< ParserNode >();
+                }
+            }
+        
         auto pEvalList = EvaluateList( Cdr( pExp ), pActual, pDef );
         if( !pEvalList )
             {
             return pEvalList;
             }
+            
         return Apply( operatorName, pEvalList, pActual, pDef );
         }
     
@@ -813,7 +838,7 @@ std::shared_ptr< ParserNode > Parser::AddPairs( std::shared_ptr< ParserNode > pX
     // std::cout << "xLen " << xListLen << " yLen " << yListLen << std::endl; 
     if( xListLen == -1 || yListLen == -1 || xListLen != yListLen )
         {
-        m_ErrorStr = "parameter list length not equal or either one of them is not a list";
+        m_ErrorStr = "ERROR: parameter list length not equal or either one of them is not a list";
         // std::cout << xListLen << " " << yListLen << std::endl;
         return std::shared_ptr< ParserNode >();
         }
