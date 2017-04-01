@@ -6,12 +6,15 @@ T
 NIL
 13
 ( COND 
- ( ( ATOM ( CONS 11 12 ) ) ( PLUS 1 ) )
- ( 3 ( PLUS 3 3 ) )
- ( ( LESS 1 3 ) ( PLUS 2 ) )
+ ( ( ATOM ( CONS 11 NIL ) ) ( PLUS 1 2 ) )
+ ( T ( PLUS 3 3 ) )
+ ( ( LESS 1 3 ) ( PLUS 2 4 ) )
  ( ( EQ 1 3 ) ( PLUS 3 4 ) ) 
- ( ( NULL T ) ( PLUS 4 5 ) ) 
+ ( ( NULL ( CONS 12 NIL ) ) ( PLUS 4 5 ) ) 
  )
+ 
+ 
+ 
 ( PLUS ( TIMES 3 12 ) 13 )
 ( LESS 1 3 )
 ( LESS 13 3 )
@@ -19,11 +22,10 @@ NIL
 ( GREATER 13 3 )
 ( EQ 1 3 )
 ( EQ 3 3 )
-( CONS 11 12 )
-( CDR ( CONS ( CONS 22 13 ) 12 ) )
-( CAR ( CONS ( CONS ( CONS ( CONS 22 13 ) 12 ) 13 ) 12 ) )
-( CAR ( CONS 11 12 ) )
-( NULL T )
+( CONS 111 NIL )
+( CDR ( CONS 31 ( CONS 22 NIL ) ) )
+( CAR ( CONS 132 NIL ) )
+( NULL (CONS 1 NIL) )
 ( NULL NIL )
-(CONS 2 (CONS 3 (CONS 4 5)))
-( COND ( (ATOM ( CONS 11 12 ) ) ( PLUS 1 2 ) ) ( ( LESS 1 3 ) ( PLUS 2 3 ) ) ( ( EQ 1 3 ) ( PLUS 3 4 ) ) ( ( NULL T ) ( PLUS 4 5 ) ) )
+(CONS 2 (CONS 3 (CONS 4 NIL)))
+( COND ( (ATOM ( CONS 11 NIL ) ) ( PLUS 1 2 ) ) ( ( LESS 1 3 ) ( PLUS 2 3 ) ) ( ( EQ 1 3 ) ( PLUS 3 4 ) ) ( ( NULL NIL ) ( PLUS 4 5 ) ) )

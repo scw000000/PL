@@ -16,6 +16,11 @@ bool Parser::ParseExpr( void )
         {
         return false;
         }
+    if( !TypeCheck( m_pRoot ) )
+        {
+        cout << "Type error" << endl;
+        return false;
+        }
     m_pRoot = Evaluate( m_pRoot );
     if( !m_pRoot )
         {
@@ -703,7 +708,7 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                     }
                 else if( pExp->IsT() )
                     {
-                        return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );
+                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );
                     //pExp->m_pAbstractVal = make_shared< abstractValData >( AbstractVals_True );    
                     }
                 else if( pExp->IsF() )
@@ -713,7 +718,7 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
                     }
                 else
                     {
-                    m_ErrorStr = "ERROR: Cannot eval literal atom other than boolean var or empty list";
+                    m_ErrorStr = "ERROR: Cannot eval literal atom other than boolean or NIL";
                     return shared_ptr< parserNode >();    
                     }
                 return pExp;
@@ -785,214 +790,296 @@ std::shared_ptr< parserNode > Parser::TypeCheck( std::shared_ptr< ParserNode > p
     
     if( BelongToGroup( pFunct->m_Str, { "COND" } ) )
         {
-        return shared_ptr< parserNode >();    
+         auto pCondList = pExp->GetListNode( 1 );
+        // Test if each member in list is a list
+        for( int i = 1; i < listLen; ++i )
+            {
+            auto s( pExp->GetListNode( i ) );
+            int sLength = s->GetListLength();
+            //PrintRecursive( s );
+            //cout << "------------ " << i << endl;
+            if( sLength != 2 )
+                {
+                m_ErrorStr = "ERROR: Sk is not a list or it's length is not 2";
+                return shared_ptr< parserNode >(); 
+                }
+            }
+            
+        auto eAbsVal = AbstractVals_Unkown;
+        int  eAbsListLen = -1;
+        for( int i = 1; i < listLen; ++i )
+            {
+            auto s( pExp->GetListNode( i ) );
+            
+            shared_ptr< parserNode > evalB( TypeCheck( s->GetListNode( 0u ) ) );
+            if( !evalB )
+                {
+                return shared_ptr< parserNode >(); 
+                }
+            auto evalBAbsVal = evalB->GetAbstractVal();
+            if( evalBAbsVal != AbstractVals_AnyBool && evalBAbsVal != AbstractVals_True && evalBAbsVal != AbstractVals_False)
+                {
+                m_ErrorStr = "ERROR: Bk is not a boolean type";
+                return shared_ptr< parserNode >(); 
+                }    
+                
+            shared_ptr< parserNode > evalE( TypeCheck( s->GetListNode( 1u ) ) );
+            if( !evalE )
+                {
+                return shared_ptr< parserNode >(); 
+                }
+            auto singleEVal = evalE->GetAbstractVal();
+            if( singleEVal == AbstractVals_Unkown )
+                {
+                m_ErrorStr = "ERROR: Ek is invalid";
+                return shared_ptr< parserNode >(); 
+                }  
+                
+            if( i == 1 )
+                {
+                eAbsVal = singleEVal;
+                eAbsListLen = evalE->GetAbstractListLen();
+                }
+            else
+                {
+                if( eAbsVal == AbstractVals_AnyNat || eAbsVal == AbstractVals_List )
+                    {
+                    if( eAbsVal != singleEVal )
+                        {
+                        m_ErrorStr = "ERROR: Ei does not have the same abstract value";
+                        return shared_ptr< parserNode >(); 
+                        }
+                    eAbsListLen = min( eAbsListLen, evalE->GetAbstractListLen() );      
+                    }   
+                else // eAbsVal == bool group
+                    {
+                    if( singleEVal != AbstractVals_AnyBool && singleEVal != AbstractVals_True && singleEVal != AbstractVals_False )
+                        {
+                        m_ErrorStr = "ERROR: Ei does not have the same abstract value as bool";
+                        return shared_ptr< parserNode >();     
+                        } 
+                    eAbsVal = AbstractVals_AnyBool;
+                    }
+                }
+            }
+        switch( eAbsVal )
+            {
+            case AbstractVals_AnyNat:
+                return GenNode( NodeTypes_NumericAtoms, "1", make_shared< abstractValData >( eAbsVal ) );
+                break;
+            case AbstractVals_List:
+                return GenNode( NodeTypes_Empty, "", make_shared< abstractValData >( eAbsVal, eAbsListLen ) );
+                break;
+            case AbstractVals_Unkown:
+                return shared_ptr< parserNode >(); 
+                break;
+            default:
+                return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( eAbsVal ) );
+                break;
+            };
         }
-    else // predefined function
+        
+    auto pEvalList = TypeCheckList( Cdr( pExp ) );
+    if( !pEvalList )
         {
-        auto pEvalList = TypeCheckList( Cdr( pExp ) );
-        if( !pEvalList )
-            {
-            return pEvalList;
-            }
+        return pEvalList;
+        }
             
-        if( BelongToGroup( pFunct->m_Str, { "PLUS", "MINUS", "TIMES", "LESS", "GREATER" } ) )
+    if( BelongToGroup( pFunct->m_Str, { "PLUS", "MINUS", "TIMES", "LESS", "GREATER" } ) )
+        {
+        if( listLen != 3 )
             {
-            if( listLen != 3 )
-                {
-                m_ErrorStr = "ERROR: Invalid parameter list length, it must be 3";
-                return shared_ptr< parserNode >(); 
-                }
-            auto evalLeft = pEvalList->GetListNode( 0u );
-            auto evalRight = pEvalList->GetListNode( 1u );
+            m_ErrorStr = "ERROR: Invalid parameter list length, it must be 3";
+            return shared_ptr< parserNode >(); 
+            }
+        auto evalLeft = pEvalList->GetListNode( 0u );
+        auto evalRight = pEvalList->GetListNode( 1u );
 
-            if( !evalLeft || !evalRight )
-                {
-                return shared_ptr< parserNode >(); 
-                }
+        if( !evalLeft || !evalRight )
+            {
+            return shared_ptr< parserNode >(); 
+            }
                 
-            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
-                {
-                m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
+        if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
+            {
+            m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
             
-                return shared_ptr< parserNode >();  
-                }
-            return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
+            return shared_ptr< parserNode >();  
             }
-        else if( BelongToGroup( pFunct->m_Str, { "EQ" } ) )
+        if( BelongToGroup( pFunct->m_Str, { "PLUS", "MINUS", "TIMES" } ) )
             {
-            if( listLen != 3 )
-                {
-                m_ErrorStr = "ERROR: Invalid list length, it must be 3";
-                return shared_ptr< parserNode >(); 
-                }
-            auto evalLeft = pEvalList->GetListNode( 0u );
-            auto evalRight = pEvalList->GetListNode( 1u );
-            if( !evalLeft || !evalRight )
-                {
-                return shared_ptr< parserNode >();   
-                } 
-            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
-                {
-                m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
-                return shared_ptr< parserNode >();  
-                }
-            return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );
+            return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) ); 
             }
-        else if( BelongToGroup( pFunct->m_Str, { "ATOM", "INT", "NULL" } ) )
+        else // less or greater
             {
-            if( listLen != 2 )
-                {
-                m_ErrorStr = "ERROR: Invalid list length, it must be 2";
-                return shared_ptr< parserNode >(); 
-                }
-            auto evalLeft = pEvalList->GetListNode( 0u );
-            if( !evalLeft )
-                {
-                return shared_ptr< parserNode >();  
-                }
-                
-            auto abstractVal = evalLeft->GetAbstractVal();
-            if( abstractVal == AbstractVals_Unkown )
-                {
-                m_ErrorStr = "ERROR: Non well typed parameter";
-                return shared_ptr< parserNode >(); 
-                }
-            if( !pFunct->m_Str.compare( "ATOM" ) )
-                {
-                if( abstractVal != AbstractVals_List )
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
-                    }
-                else
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
-                    }
-                }
-            else if( !pFunct->m_Str.compare( "INT" ) )
-                {
-                if( abstractVal == AbstractVals_AnyNat )
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
-                    }
-                else
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
-                    }
-                }
-            else if( !pFunct->m_Str.compare( "NULL" ) )
-                {
-                if( abstractVal != AbstractVals_List )
-                    {
-                    m_ErrorStr = "ERROR: Input is not a list";
-                    return shared_ptr< parserNode >(); 
-                    }
-                
-                int abstractListLen = evalLeft->GetAbstractListLen(); 
-                if( abstractListLen < 0 )
-                    {
-                    m_ErrorStr = "ERROR: Input is not a list";
-                    return shared_ptr< parserNode >();    
-                    }
-                    
-                if( abstractListLen == 0 ) // it should be anybool instead of True
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );       
-                    }  
-                else
-                    {
-                    return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
-                    }
-                }
-            else 
-                {
-                m_ErrorStr = "ERROR: Not supported operator ";
-                m_ErrorStr.append( pFunct->m_Str );
-                return shared_ptr< parserNode >();
-                }
+            return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );    
             }
-        else if( BelongToGroup( pFunct->m_Str, { "CAR", "CDR" } ) )
+        }
+    else if( BelongToGroup( pFunct->m_Str, { "EQ" } ) )
+        {
+        if( listLen != 3 )
             {
-            if( listLen != 2 )
-                {
-                m_ErrorStr = "ERROR: Invalid list length, it must be 2";
-                return shared_ptr< parserNode >(); 
-                }
+            m_ErrorStr = "ERROR: Invalid list length, it must be 3";
+            return shared_ptr< parserNode >(); 
+            }
+        auto evalLeft = pEvalList->GetListNode( 0u );
+        auto evalRight = pEvalList->GetListNode( 1u );
+        if( !evalLeft || !evalRight )
+            {
+            return shared_ptr< parserNode >();   
+            } 
+        if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_AnyNat )
+            {
+            m_ErrorStr = "ERROR: eval( s1 ) or eval( s2 ) is not numeric atom";
+            return shared_ptr< parserNode >();  
+            }
+        return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );
+        }
+    else if( BelongToGroup( pFunct->m_Str, { "ATOM", "INT", "NULL" } ) )
+        {
+        if( listLen != 2 )
+           {
+            m_ErrorStr = "ERROR: Invalid list length, it must be 2";
+            return shared_ptr< parserNode >(); 
+            }
+        auto evalLeft = pEvalList->GetListNode( 0u );
+        if( !evalLeft )
+            {
+            return shared_ptr< parserNode >();  
+            }
                 
-            auto evalLeft = pEvalList->GetListNode( 0u );
-            if( !evalLeft )
-                {
-                return shared_ptr< parserNode >();  
-                }
-                
-            auto abstractVal = evalLeft->GetAbstractVal();
-            if( abstractVal == AbstractVals_Unkown )
-                {
-                m_ErrorStr = "ERROR: Non well typed parameter";
-                return shared_ptr< parserNode >(); 
-                }
-            
+        auto abstractVal = evalLeft->GetAbstractVal();
+        if( abstractVal == AbstractVals_Unkown )
+            {
+            m_ErrorStr = "ERROR: Non well typed parameter";
+            return shared_ptr< parserNode >(); 
+            }
+        if( !pFunct->m_Str.compare( "ATOM" ) )
+            {
             if( abstractVal != AbstractVals_List )
                 {
-                m_ErrorStr = "ERROR: Parameter is not a list";
-                return shared_ptr< parserNode >(); 
+                return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
                 }
-            
-            int abstractListLen = evalLeft->GetAbstractListLen();
-            if( abstractListLen <= 0 )
+            else
                 {
-                m_ErrorStr = "ERROR: List length >= 0";
-                return shared_ptr< parserNode >();         
-                }
-            
-            if( !pFunct->m_Str.compare( "CAR" ) )
-                {
-                return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
-                }
-            else if( !pFunct->m_Str.compare( "CDR" ) )
-                {
-                return GenNode( NodeTypes_Empty, "LIST", make_shared< abstractValData >( AbstractVals_List, abstractListLen - 1 ) );
-                }
-            else 
-                {
-                m_ErrorStr = "ERROR: Not supported operator ";
-                m_ErrorStr.append( pFunct->m_Str );
-                return shared_ptr< parserNode >();
+                return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
                 }
             }
-        else if( BelongToGroup( pFunct->m_Str, { "CONS" } ) )
+        else if( !pFunct->m_Str.compare( "INT" ) )
             {
-            if( listLen != 3 )
+            if( abstractVal == AbstractVals_AnyNat )
                 {
-                m_ErrorStr = "ERROR: Invalid list length, it must be 3";
-                return shared_ptr< parserNode >(); 
+                return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_True ) );   
                 }
-            auto evalLeft = pEvalList->GetListNode( 0u );
-            auto evalRight = pEvalList->GetListNode( 1u );
-            if( !evalLeft || !evalRight )
+            else
                 {
-                return shared_ptr< parserNode >();  
-                }
-                
-            if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_List )
-                {
-                m_ErrorStr = "ERROR: invalid parameter type";
-                return shared_ptr< parserNode >();  
-                }
-                
-            if( !pFunct->m_Str.compare( "CONS" ) )
-                {
-                return GenNode( NodeTypes_Empty, "LIST", make_shared< abstractValData >( AbstractVals_List, evalRight->GetAbstractListLen() + 1 ) );
-                }
-            else 
-                {
-                m_ErrorStr = "ERROR: Not supported operator ";
-                m_ErrorStr.append( pFunct->m_Str );
-                return shared_ptr< parserNode >();
+                return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
                 }
             }
-        // return Apply( operatorName, pEvalList );
+        else if( !pFunct->m_Str.compare( "NULL" ) )
+            {
+            if( abstractVal != AbstractVals_List )
+                {
+                m_ErrorStr = "ERROR: Input is not a list for NULL operator";
+                return shared_ptr< parserNode >(); 
+                }
+                
+            int abstractListLen = evalLeft->GetAbstractListLen(); 
+            if( abstractListLen < 0 )
+                {
+                m_ErrorStr = "ERROR: Input is not a list for NULL operator";
+                return shared_ptr< parserNode >();    
+                }
+                    
+            if( abstractListLen == 0 ) // it should be anybool instead of True
+                {
+                return GenNode( NodeTypes_LiteralAtoms, "T", make_shared< abstractValData >( AbstractVals_AnyBool ) );       
+                }  
+            else
+                {
+                return GenNode( NodeTypes_LiteralAtoms, "F", make_shared< abstractValData >( AbstractVals_False ) ); 
+                }
+            }
+        else 
+            {
+            m_ErrorStr = "ERROR: Not supported operator ";
+            m_ErrorStr.append( pFunct->m_Str );
+            return shared_ptr< parserNode >();
+            }
         }
-    
+    else if( BelongToGroup( pFunct->m_Str, { "CAR", "CDR" } ) )
+        {
+        if( listLen != 2 )
+            {
+            m_ErrorStr = "ERROR: Invalid list length, it must be 2";
+            return shared_ptr< parserNode >(); 
+            }
+                
+        auto evalLeft = pEvalList->GetListNode( 0u );
+        if( !evalLeft )
+            {
+            return shared_ptr< parserNode >();  
+            }
+                
+        auto abstractVal = evalLeft->GetAbstractVal();
+        if( abstractVal == AbstractVals_Unkown )
+            {
+            m_ErrorStr = "ERROR: Non well typed parameter";
+            return shared_ptr< parserNode >(); 
+            }
+            
+        if( abstractVal != AbstractVals_List )
+            {
+            m_ErrorStr = "ERROR: Parameter is not a list";
+            return shared_ptr< parserNode >(); 
+            }
+            
+        int abstractListLen = evalLeft->GetAbstractListLen();
+        if( abstractListLen <= 0 )
+            {
+            m_ErrorStr = "ERROR: List length >= 0";
+            return shared_ptr< parserNode >();         
+            }
+            
+        if( !pFunct->m_Str.compare( "CAR" ) )
+            {
+            return GenNode( NodeTypes_NumericAtoms, "0", make_shared< abstractValData >( AbstractVals_AnyNat ) );
+            }
+        else if( !pFunct->m_Str.compare( "CDR" ) )
+            {
+            return GenNode( NodeTypes_Empty, "LIST", make_shared< abstractValData >( AbstractVals_List, abstractListLen - 1 ) );
+            }
+        else 
+            {
+            m_ErrorStr = "ERROR: Not supported operator ";
+            m_ErrorStr.append( pFunct->m_Str );
+            return shared_ptr< parserNode >();
+            }
+        }
+    else if( BelongToGroup( pFunct->m_Str, { "CONS" } ) )
+        {
+        if( listLen != 3 )
+            {
+            m_ErrorStr = "ERROR: Invalid list length, it must be 3";
+            return shared_ptr< parserNode >(); 
+            }
+        auto evalLeft = pEvalList->GetListNode( 0u );
+        auto evalRight = pEvalList->GetListNode( 1u );
+        if( !evalLeft || !evalRight )
+            {
+            return shared_ptr< parserNode >();  
+            }
+                
+       if( evalLeft->GetAbstractVal() != AbstractVals_AnyNat || evalRight->GetAbstractVal() != AbstractVals_List )
+            {
+            m_ErrorStr = "ERROR: invalid parameter type for cons, left is not Nat or right is not Nat list";
+            PrintRecursive( pExp );
+            return shared_ptr< parserNode >();  
+            }
+                
+        return GenNode( NodeTypes_Empty, "", make_shared< abstractValData >( AbstractVals_List, evalRight->GetAbstractListLen() + 1 ) );
+        }
+
     m_ErrorStr = "ERROR: Undefined operator ";
     m_ErrorStr.append( pFunct->m_Str );
     return shared_ptr< parserNode >();    
